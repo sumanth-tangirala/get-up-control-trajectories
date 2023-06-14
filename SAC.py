@@ -257,10 +257,10 @@ class SAC(nn.Module):
         torch.save(self.log_alpha_optimizer.state_dict(), filename + "_log_alpha_optimizer.pt")
 
     def load(self, filename, load_optimizer=False):
-        self.critic.load_state_dict(torch.load(filename + "_critic.pt"))
-        self.critic_target.load_state_dict(torch.load(filename + "_critic_target.pt"))
-        self.actor.load_state_dict(torch.load(filename + "_actor.pt"))
-        self.log_alpha = torch.load(filename + "_log_alpha.pt")
+        self.critic.load_state_dict(torch.load(filename + "_critic.pt", map_location=device))
+        self.critic_target.load_state_dict(torch.load(filename + "_critic_target.pt", map_location=device))
+        self.actor.load_state_dict(torch.load(filename + "_actor.pt", map_location=device))
+        self.log_alpha = torch.load(filename + "_log_alpha.pt", map_location=device)
         self.log_alpha_optimizer = torch.optim.Adam(
             [self.log_alpha], lr=1e-4, betas=(0.9, 0.999)
         )
