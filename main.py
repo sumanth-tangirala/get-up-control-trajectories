@@ -22,6 +22,7 @@ np.set_printoptions(precision=5, suppress=True)
 class ArgParserTrain(argparse.ArgumentParser):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.add_argument('--get_trajectory', default=False, action='store_true')
         self.add_argument('--env', type=str, default='HumanoidStandup',
                           choices=['HumanoidStandup', 'HumanoidVariantStandup'])
         self.add_argument('--variant', type=str, default='', choices=['Disabled', 'Noarm'])
@@ -61,8 +62,14 @@ class ArgParserTrain(argparse.ArgumentParser):
 
 def main():
     args = ArgParserTrain().parse_args()
+    if args.get_trajectory:
+        get_trajectory(args)
+        return
     trainer = Trainer(args)
     trainer.train_sac()
+
+def get_trajectory(args):
+    trainer = Trainer(args)
 
 
 class Trainer():
