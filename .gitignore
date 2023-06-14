@@ -32,3 +32,4 @@
 /.idea/modules.xml
 /.idea/vcs.xml
 /venv/
+/.python-version
