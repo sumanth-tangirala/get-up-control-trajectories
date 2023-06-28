@@ -21,6 +21,8 @@ STANDING_POSE = [0, -0.11665, 0, -0.03601, -0.03219, 0.05025,
 # std: 0.00431
 COM_HEIGHT = 0.80326
 
+TOTAL_STEPS = 20000
+
 
 class HumanoidStandupEnv():
     _STAND_HEIGHT = 1.55
@@ -98,7 +100,7 @@ class HumanoidStandupEnv():
 
     @property
     def _done(self):
-        if self._step_num >= 250:
+        if self._step_num >= TOTAL_STEPS:
             return True
         return False
 

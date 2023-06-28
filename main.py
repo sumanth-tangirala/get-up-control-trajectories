@@ -3,7 +3,7 @@ import json
 import os
 import sys
 import time
-
+from tqdm import tqdm
 import cv2
 import imageio
 import numpy as np
@@ -12,7 +12,7 @@ import torch
 import utils
 from SAC import SAC
 from env import HumanoidStandupEnv, HumanoidStandupVelocityEnv, HumanoidVariantStandupEnv, \
-    HumanoidVariantStandupVelocityEnv
+    HumanoidVariantStandupVelocityEnv, TOTAL_STEPS
 from utils import RLLogger, ReplayBuffer, organize_args
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -59,8 +59,9 @@ class ArgParserTrain(argparse.ArgumentParser):
         self.add_argument('--log_interval', type=int, default=100, help='log every N')
         self.add_argument("--tag", default="")
 
-
+LOAD_DIR = 'experiment/pretrained/student'
 def main():
+    sys.argv[7] = LOAD_DIR
     args = ArgParserTrain().parse_args()
     if args.get_trajectory:
         get_trajectory(args)
@@ -69,15 +70,56 @@ def main():
     trainer.train_sac()
 
 def get_trajectory(args):
+    np.random.seed(args.seed)
+    with open(os.path.join(LOAD_DIR, 'args.json'), 'r') as f:
+        pretrained_args_json = json.load(f)
+    args.__dict__.update(pretrained_args_json)
+    # args.teacher_dir = "experiment/pretrained/teacher"
+    args = ArgParserTrain().parse_args(namespace=args)
     trainer = Trainer(args)
+    generate_trajectory(trainer)
+
+def generate_trajectory(trainer):
+    env = HumanoidStandupEnv(trainer.args, trainer.args.seed)
+    power_base, policy = trainer.env.power_base, trainer.policy
+    speed_profile = np.linspace(trainer.args.slow_speed, trainer.args.fast_speed, num=trainer.args.test_iterations,endpoint=True)
+
+    videos = []
+
+    for i in range(trainer.args.test_iterations):
+        state, done = env.reset(test_time=True, speed=speed_profile[i]), False
+        episode_timesteps = 0
+        episode_reward = 0
+        video = []
+        trajectory = [state]
+        with tqdm(total=TOTAL_STEPS) as pbar:
+            while not done:
+                action = policy.select_action(state)
+                state, reward, done, _ = env.step(action, test_time=True)
+                trajectory.append(state)
+                episode_reward += reward
+                episode_timesteps += 1
+                if episode_timesteps == 1 or True:
+                    video = video + list(env.starting_images)
+                    video.append(env.render())
+                pbar.update(1)
+        videos.append(video)
+
+        print('Iteration {}/{} Complete'.format(i+1, trainer.args.test_iterations))
+
+    for i, video in enumerate(videos):
+        if len(video) != 0:
+            imageio.mimsave(os.path.join('videos/', '{}.mp4'.format(i)),video, fps=30)
+
 
 
 class Trainer():
     def __init__(self, args):
         args = organize_args(args)
         self.args = args
-        self.setup(args)
-        self.logger.log_start(sys.argv, args)
+        if not args.get_trajectory:
+            self.setup(args)
+            self.logger.log_start(sys.argv, args)
         self.env = self.create_env(args)
         torch.manual_seed(args.seed)
         np.random.seed(args.seed)
@@ -236,6 +278,36 @@ class Trainer():
 
         return True
 
+    def run_test_iteration(self, test_env, speed_profile, test_policy, video_index, iteration_index, video_array, test_reward):
+        video = []
+        state, done = test_env.reset(test_time=True, speed=speed_profile[iteration_index]), False
+        episode_timesteps = 0
+        episode_reward = 0
+
+        while not done:
+            action = test_policy.select_action(state)
+            state, reward, done, _ = test_env.step(action, test_time=True)
+            episode_reward += reward
+            episode_timesteps += 1
+            if iteration_index in video_index:
+                if episode_timesteps == 1:
+                    video = video + list(test_env.starting_images)
+                video.append(test_env.render())
+
+        if self.args.to_file:
+            test_env.geom_traj["state"] = np.stack(test_env.geom_traj["state"])
+            test_env.teacher_geoms["state"] = np.stack(test_env.teacher_geoms["state"])
+            for name in test_env.geom_names:
+                test_env.geom_traj[name + "_pos"] = np.stack(test_env.geom_traj[name + "_pos"])
+                test_env.geom_traj[name + "_angleaxis"] = np.stack(test_env.geom_traj[name + "_angleaxis"])
+                test_env.teacher_geoms[name + "_pos"] = np.stack(test_env.teacher_geoms[name + "_pos"])
+                test_env.teacher_geoms[name + "_angleaxis"] = np.stack(test_env.teacher_geoms[name + "_angleaxis"])
+            np.savez(os.path.join(self.buffer_dir, "RecordedMotionSlow{}".format(iteration_index)), **test_env.geom_traj)
+            np.savez(os.path.join(self.buffer_dir, "RecordedMotionFast{}".format(iteration_index)), **test_env.teacher_geoms)
+
+        video_array.append(video)
+        test_reward.append(episode_reward)
+
     def run_tests(self, power_base, test_policy):
         video_index = [np.random.random_integers(0, self.args.test_iterations - 1)]
         # video_index = np.arange(self.args.test_iterations)
@@ -250,34 +322,7 @@ class Trainer():
                                     endpoint=True)
         video_array = []
         for i in range(self.args.test_iterations):
-            video = []
-            state, done = test_env.reset(test_time=True, speed=speed_profile[i]), False
-            episode_timesteps = 0
-            episode_reward = 0
-
-            while not done:
-                action = test_policy.select_action(state)
-                state, reward, done, _ = test_env.step(action, test_time=True)
-                episode_reward += reward
-                episode_timesteps += 1
-                if i in video_index:
-                    if episode_timesteps == 1:
-                        video = video + list(test_env.starting_images)
-                    video.append(test_env.render())
-
-            if self.args.to_file:
-                test_env.geom_traj["state"] = np.stack(test_env.geom_traj["state"])
-                test_env.teacher_geoms["state"] = np.stack(test_env.teacher_geoms["state"])
-                for name in test_env.geom_names:
-                    test_env.geom_traj[name + "_pos"] = np.stack(test_env.geom_traj[name + "_pos"])
-                    test_env.geom_traj[name + "_angleaxis"] = np.stack(test_env.geom_traj[name + "_angleaxis"])
-                    test_env.teacher_geoms[name + "_pos"] = np.stack(test_env.teacher_geoms[name + "_pos"])
-                    test_env.teacher_geoms[name + "_angleaxis"] = np.stack(test_env.teacher_geoms[name + "_angleaxis"])
-                np.savez(os.path.join(self.buffer_dir, "RecordedMotionSlow{}".format(i)), **test_env.geom_traj)
-                np.savez(os.path.join(self.buffer_dir, "RecordedMotionFast{}".format(i)), **test_env.teacher_geoms)
-
-            video_array.append(video)
-            test_reward.append(episode_reward)
+            self.run_test_iteration(test_env, speed_profile, test_policy, video_index, i, video_array, test_reward)
         test_reward = np.array(test_reward)
         return test_reward.mean(), test_reward.min(), video_array
 
