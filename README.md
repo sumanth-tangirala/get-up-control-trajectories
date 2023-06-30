@@ -1,3 +1,13 @@
+# Generating State Space Trajectories while Getting up
+
+Run the following to generate the trajectories
+
+```shell
+python main.py --get_trajectory --teacher_student --teacher_dir experiment/pretrained/teacher --load_dir experiment/pretrained/student --test_policy --seed 42 --test_iterations 1
+```
+
+### Below is the README from the original get up control repository 
+
 # Learning to Get Up
 
 This repository contains code for the SIGGRAPH 2022 submission ***Learning to Get Up***. <br /> 

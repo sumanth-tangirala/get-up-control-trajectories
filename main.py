@@ -22,7 +22,6 @@ np.set_printoptions(precision=5, suppress=True)
 class ArgParserTrain(argparse.ArgumentParser):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.add_argument('--get_trajectory', default=False, action='store_true')
         self.add_argument('--env', type=str, default='HumanoidStandup',
                           choices=['HumanoidStandup', 'HumanoidVariantStandup'])
         self.add_argument('--variant', type=str, default='', choices=['Disabled', 'Noarm'])
@@ -58,10 +57,11 @@ class ArgParserTrain(argparse.ArgumentParser):
         self.add_argument("--start_timesteps", default=10000, type=int)
         self.add_argument('--log_interval', type=int, default=100, help='log every N')
         self.add_argument("--tag", default="")
+        #New Args
+        self.add_argument('--get_trajectory', default=False, action='store_true')
 
 LOAD_DIR = 'experiment/pretrained/student'
 def main():
-    sys.argv[7] = LOAD_DIR
     args = ArgParserTrain().parse_args()
     if args.get_trajectory:
         get_trajectory(args)
@@ -71,20 +71,18 @@ def main():
 
 def get_trajectory(args):
     np.random.seed(args.seed)
-    with open(os.path.join(LOAD_DIR, 'args.json'), 'r') as f:
-        pretrained_args_json = json.load(f)
-    args.__dict__.update(pretrained_args_json)
-    # args.teacher_dir = "experiment/pretrained/teacher"
     args = ArgParserTrain().parse_args(namespace=args)
     trainer = Trainer(args)
     generate_trajectory(trainer)
 
 def generate_trajectory(trainer):
-    env = HumanoidStandupEnv(trainer.args, trainer.args.seed)
+    env = trainer.env
     power_base, policy = trainer.env.power_base, trainer.policy
     speed_profile = np.linspace(trainer.args.slow_speed, trainer.args.fast_speed, num=trainer.args.test_iterations,endpoint=True)
 
     videos = []
+    success_images = []
+    x_values = []
 
     for i in range(trainer.args.test_iterations):
         state, done = env.reset(test_time=True, speed=speed_profile[i]), False
@@ -96,13 +94,20 @@ def generate_trajectory(trainer):
             while not done:
                 action = policy.select_action(state)
                 state, reward, done, _ = env.step(action, test_time=True)
+                x = env._upright * env._standing * env._dont_move * env._closer_feet
                 trajectory.append(state)
                 episode_reward += reward
                 episode_timesteps += 1
-                if episode_timesteps == 1 or True:
+                if episode_timesteps == 1:
                     video = video + list(env.starting_images)
-                    video.append(env.render())
+
+                img = env.render()
+                video.append(img)
                 pbar.update(1)
+                print(x)
+                if x > 0.1:
+                    success_images.append(img)
+                    x_values.append(x)
         videos.append(video)
 
         print('Iteration {}/{} Complete'.format(i+1, trainer.args.test_iterations))
@@ -110,6 +115,9 @@ def generate_trajectory(trainer):
     for i, video in enumerate(videos):
         if len(video) != 0:
             imageio.mimsave(os.path.join('videos/', '{}.mp4'.format(i)),video, fps=30)
+
+    for i, img in enumerate(success_images):
+        imageio.imsave(os.path.join('success_statuses/', '{:.5f}.jpg'.format(round(x_values[i], 5))),img)
 
 
 

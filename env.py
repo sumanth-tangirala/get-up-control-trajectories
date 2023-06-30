@@ -21,7 +21,7 @@ STANDING_POSE = [0, -0.11665, 0, -0.03601, -0.03219, 0.05025,
 # std: 0.00431
 COM_HEIGHT = 0.80326
 
-TOTAL_STEPS = 20000
+TOTAL_STEPS = 250
 
 
 class HumanoidStandupEnv():
@@ -173,7 +173,10 @@ class HumanoidStandupVelocityEnv(HumanoidStandupEnv):
             end_next_step = False
             state, done = self.teacher_env.reset(test_time=True), False
             if len(self.teacher_env.starting_images) > 0:
-                self.starting_images = np.concatenate((self.teacher_env.starting_images,
+                if self.args.get_trajectory:
+                    self.starting_images = self.teacher_env.starting_images
+                else:
+                    self.starting_images = np.concatenate((self.teacher_env.starting_images,
                                                        self.teacher_env.starting_images,
                                                        self.teacher_env.starting_images), axis=2)
             if self.args.to_file:
@@ -388,6 +391,8 @@ class HumanoidStandupVelocityEnv(HumanoidStandupEnv):
             self.render_env.physics.after_reset()
         image_m = self.render_env.physics.render(height=384, width=384, camera_id=1)
         image_r = self.teacher_images[min(self._step_num - 1, len(self.teacher_images) - 1)]
+        if self.args.get_trajectory:
+            return image_l
         return np.concatenate((image_l, image_m, image_r), axis=1)
 
 
