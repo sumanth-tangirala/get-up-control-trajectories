@@ -1,5 +1,7 @@
 import json
 import logging
+from multiprocessing import Pool, cpu_count
+
 import math
 import os
 
@@ -7,6 +9,7 @@ import numpy as np
 import torch
 from scipy import interpolate
 from scipy.spatial.transform import Rotation as R
+from tqdm import tqdm
 
 
 class ReplayBuffer(object):
@@ -236,6 +239,17 @@ def interpolate_motion(data, interpolation_coeff=0.25, uneven=False):
     }
 
     return interpolated_data
+
+def parallel_run(func, arg_list=None, show_progress=True):
+    if not show_progress:
+        with Pool(cpu_count() - 1) as p:
+            return p.map(func, arg_list)
+    results = []
+
+    with Pool(cpu_count() - 1) as p:
+        for result in tqdm(p.imap_unordered(func, arg_list), total=len(arg_list)):
+            results.append(result)
+    return results
 
 
 if __name__ == "__main__":

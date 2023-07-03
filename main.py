@@ -3,6 +3,8 @@ import json
 import os
 import sys
 import time
+from functools import partial
+
 from tqdm import tqdm
 import cv2
 import imageio
@@ -58,66 +60,90 @@ class ArgParserTrain(argparse.ArgumentParser):
         self.add_argument('--log_interval', type=int, default=100, help='log every N')
         self.add_argument("--tag", default="")
         #New Args
-        self.add_argument('--get_trajectory', default=False, action='store_true')
+        self.add_argument('--get_trajectories', default=False, action='store_true')
 
 LOAD_DIR = 'experiment/pretrained/student'
 def main():
     args = ArgParserTrain().parse_args()
-    if args.get_trajectory:
-        get_trajectory(args)
+    if args.get_trajectories:
+        get_trajectories(args)
         return
     trainer = Trainer(args)
     trainer.train_sac()
 
-def get_trajectory(args):
-    np.random.seed(args.seed)
+def generate_trajectories_dir(args):
+    ts = time.gmtime()
+    ts = time.strftime("%m-%d-%H-%M-%S", ts)
+    exp_name = '{}_{}'.format(args.env, ts)
+    traj_dir = os.path.join(args.work_dir, 'trajectories')
+    exp_dir = os.path.join(traj_dir, exp_name)
+
+    utils.make_dir(traj_dir)
+    utils.make_dir(exp_dir)
+
+    return exp_dir
+
+def get_trajectories(args):
     args = ArgParserTrain().parse_args(namespace=args)
+    speed = (args.slow_speed + args.fast_speed)/2 # TODO
+
+    exp_dir = generate_trajectories_dir(args)
+    utils.make_dir(os.path.join(exp_dir, 'videos'))
+
+    generate_trajectory_partial = partial(generate_trajectory, speed=speed, exp_dir=exp_dir, args=args)
+
+    results = utils.parallel_run(generate_trajectory_partial, list(range(args.test_iterations)))
+    results = np.array(results, dtype=object)
+    np.save(os.path.join(exp_dir, 'trajectories.npy'), results)
+
+def generate_trajectory(idx, speed, exp_dir, args):
+    seed = (os.getpid() * int(time.time())) % 123456789 # To handle random seeds among multiple processes
+    args.seed = seed
     trainer = Trainer(args)
-    generate_trajectory(trainer)
-
-def generate_trajectory(trainer):
     env = trainer.env
-    power_base, policy = trainer.env.power_base, trainer.policy
-    speed_profile = np.linspace(trainer.args.slow_speed, trainer.args.fast_speed, num=trainer.args.test_iterations,endpoint=True)
+    policy = trainer.policy
 
-    videos = []
-    success_images = []
-    x_values = []
+    # success_images = []
+    # x_values = []
+    episode_timesteps = 0
+    episode_reward = 0
 
-    for i in range(trainer.args.test_iterations):
-        state, done = env.reset(test_time=True, speed=speed_profile[i]), False
-        episode_timesteps = 0
-        episode_reward = 0
-        video = []
-        trajectory = [state]
-        with tqdm(total=TOTAL_STEPS) as pbar:
-            while not done:
-                action = policy.select_action(state)
-                state, reward, done, _ = env.step(action, test_time=True)
-                x = env._upright * env._standing * env._dont_move * env._closer_feet
-                trajectory.append(state)
-                episode_reward += reward
-                episode_timesteps += 1
-                if episode_timesteps == 1:
-                    video = video + list(env.starting_images)
+    state, done = env.reset(test_time=True, speed=speed), False
 
-                img = env.render()
-                video.append(img)
-                pbar.update(1)
-                print(x)
-                if x > 0.1:
-                    success_images.append(img)
-                    x_values.append(x)
-        videos.append(video)
+    video = []
+    trajectory = [
+        np.concatenate([state, [env._upright, env._standing, env._dont_move, env._closer_feet]])
+    ]
 
-        print('Iteration {}/{} Complete'.format(i+1, trainer.args.test_iterations))
+    while not done:
+        action = policy.select_action(state)
 
-    for i, video in enumerate(videos):
-        if len(video) != 0:
-            imageio.mimsave(os.path.join('videos/', '{}.mp4'.format(i)),video, fps=30)
+        state, reward, done, _ = env.step(action, test_time=True)
+        state_to_store = np.concatenate([state, [env._upright, env._standing, env._dont_move, env._closer_feet]])
+        trajectory.append(state_to_store)
 
-    for i, img in enumerate(success_images):
-        imageio.imsave(os.path.join('success_statuses/', '{:.5f}.jpg'.format(round(x_values[i], 5))),img)
+        episode_reward += reward
+        episode_timesteps += 1
+
+        if episode_timesteps == 1:
+            video = video + list(env.starting_images) # Prepends 80 frames to the video
+        img = env.render()
+
+        video.append(img)
+
+        # print(x)
+        # if x > 0.1:
+        #     success_images.append(img)
+        #     x_values.append(x)
+
+    if len(video) != 0:
+        imageio.mimsave(os.path.join(exp_dir, 'videos/{}.mp4'.format(idx)),video, fps=30)
+
+    # for i, img in enumerate(success_images):
+    #     imageio.imsave(os.path.join('success_statuses/', '{:.5f}.jpg'.format(round(x_values[i], 5))),img)
+
+    trajectory = np.array(trajectory)
+    return trajectory
 
 
 
@@ -125,12 +151,13 @@ class Trainer():
     def __init__(self, args):
         args = organize_args(args)
         self.args = args
-        if not args.get_trajectory:
+        if not self.args.get_trajectories:
             self.setup(args)
             self.logger.log_start(sys.argv, args)
-        self.env = self.create_env(args)
         torch.manual_seed(args.seed)
         np.random.seed(args.seed)
+        self.env = self.create_env(args)
+
 
         obs_dim = self.env.obs_shape
         self.act_dim = self.env.action_space
