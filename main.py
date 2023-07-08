@@ -95,7 +95,7 @@ def generate_trajectory(idx, exp_dir, args):
     state, done = env.reset(test_time=True, speed=args.target_speed), False
 
     video = []
-    initial_state = np.concatenate([state, [env._upright, env._standing, env._dont_move, env._closer_feet]])
+    initial_state = np.concatenate([state[:-1], [env._upright, env._standing, env._dont_move, env._closer_feet]])
     trajectory = [
         ', '.join([str(i) for i in initial_state])
     ]
@@ -104,7 +104,7 @@ def generate_trajectory(idx, exp_dir, args):
         action = policy.select_action(state)
 
         state, reward, done, _ = env.step(action, test_time=True)
-        state_to_store = np.concatenate([state, [env._upright, env._standing, env._dont_move, env._closer_feet]])
+        state_to_store = np.concatenate([state[:-1], [env._upright, env._standing, env._dont_move, env._closer_feet]])
         trajectory.append('\n' + ', '.join([str(i) for i in state_to_store]))
 
         # episode_timesteps += 1
