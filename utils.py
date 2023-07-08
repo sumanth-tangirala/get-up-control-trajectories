@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 from multiprocessing import Pool, cpu_count
 
 import math
@@ -240,16 +241,30 @@ def interpolate_motion(data, interpolation_coeff=0.25, uneven=False):
 
     return interpolated_data
 
-def parallel_run(func, arg_list=None, show_progress=True):
+def parallel_run(func, arg_list=None, show_progress=True, should_return=True):
     if not show_progress:
-        with Pool(cpu_count() - 1) as p:
+        with Pool(cpu_count()) as p:
             return p.map(func, arg_list)
+
     results = []
 
-    with Pool(cpu_count() - 1) as p:
+    with Pool(cpu_count()) as p:
         for result in tqdm(p.imap_unordered(func, arg_list), total=len(arg_list)):
-            results.append(result)
+            if should_return:
+                results.append(result)
     return results
+
+def generate_trajectories_dir(args):
+    ts = time.gmtime()
+    ts = time.strftime("%m-%d-%H-%M-%S", ts)
+    exp_name = '{}_{}'.format(args.env, ts)
+    traj_dir = os.path.join(args.work_dir, 'trajectories')
+    exp_dir = os.path.join(traj_dir, exp_name)
+
+    make_dir(traj_dir)
+    make_dir(exp_dir)
+
+    return exp_dir
 
 
 if __name__ == "__main__":
