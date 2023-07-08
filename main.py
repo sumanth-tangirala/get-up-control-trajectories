@@ -105,7 +105,7 @@ def generate_trajectory(idx, exp_dir, args):
 
         state, reward, done, _ = env.step(action, test_time=True)
         state_to_store = np.concatenate([state, [env._upright, env._standing, env._dont_move, env._closer_feet]])
-        trajectory.append(', '.join([str(i) for i in state_to_store]))
+        trajectory.append('\n' + ', '.join([str(i) for i in state_to_store]))
 
         # episode_timesteps += 1
         # if episode_timesteps == 1:
