@@ -3,7 +3,7 @@
 Run the following to generate the trajectories
 
 ```shell
-python main.py --get_trajectories --teacher_student --teacher_dir experiment/pretrained/teacher --load_dir experiment/pretrained/student --test_policy --test_iterations 1
+python main.py --get_trajectories --test_iterations 100
 ```
 
 ### Below is the README from the original get up control repository 
