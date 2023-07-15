@@ -329,12 +329,12 @@ class HumanoidStandupVelocityEnv(HumanoidStandupEnv):
         if self._step_num >= self.teacher_episode_length and self.physics.center_of_mass_position()[2] < 0.5:
             self.terminal_signal = True
             return True
-        if self._step_num < self.teacher_episode_length and np.abs(
+        if not self.args.get_trajectories and self._step_num < self.teacher_episode_length and np.abs(
                 self.env.physics.center_of_mass_position()[2] - self.interpolated_trajectory["com"][self._step_num - 1][
                     2]) > 0.5:
             self.terminal_signal = True
             return True
-        if self._step_num < (self.teacher_episode_length + 150):
+        if self._step_num < (self.teacher_episode_length + (150 if not self.args.get_trajectories else 250)):
             return False
         return True
 
