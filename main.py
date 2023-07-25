@@ -80,10 +80,18 @@ def get_trajectories(args):
 
     exp_dir = utils.generate_trajectories_dir(args)
     utils.make_dir(os.path.join(exp_dir, 'videos'))
+    utils.make_dir(os.path.join(exp_dir, 'state'))
+    utils.make_dir(os.path.join(exp_dir, 'success_params'))
 
     generate_trajectory_partial = partial(generate_trajectory, exp_dir=exp_dir, args=args)
 
     utils.parallel_run(generate_trajectory_partial, list(range(args.test_iterations)), should_return=False)
+
+def get_success_params(env):
+    return [env._upright, env._standing, env._dont_move]
+
+def get_state_to_save(state):
+    return state[:67]
 
 def generate_trajectory(idx, exp_dir, args):
     seed = (os.getpid() * int(time.time())) % 123456789 # To handle random seeds across multiple processes
@@ -95,21 +103,20 @@ def generate_trajectory(idx, exp_dir, args):
     state, done = env.reset(test_time=True, speed=args.target_speed), False
 
     video = []
-    initial_state = np.concatenate([state[:-1], [env._upright, env._standing, env._dont_move, env._closer_feet]])
+    initial_state = get_state_to_save(state)
     trajectory = [
         ', '.join([str(i) for i in initial_state])
+    ]
+    success_params_trajectory = [
+        ', '.join(str(i) for i in get_success_params(env))
     ]
 
     while not done:
         action = policy.select_action(state)
 
         state, reward, done, _ = env.step(action, test_time=True)
-        state_to_store = np.concatenate([state[:-1], [env._upright, env._standing, env._dont_move, env._closer_feet]])
-        trajectory.append('\n' + ', '.join([str(i) for i in state_to_store]))
-
-        # episode_timesteps += 1
-        # if episode_timesteps == 1:
-        #     video = video + list(env.starting_images) # Prepends 80 frames to the video
+        trajectory.append('\n' + ', '.join([str(i) for i in get_state_to_save(state)]))
+        success_params_trajectory.append('\n' + ', '.join([str(i) for i in get_success_params(env)]))
 
         img = env.render()
         video.append(img)
@@ -117,10 +124,11 @@ def generate_trajectory(idx, exp_dir, args):
     if len(video) != 0:
         imageio.mimsave(os.path.join(exp_dir, 'videos/{}.mp4'.format(idx)),video, fps=30)
 
-    with open(os.path.join(exp_dir, 'trajectory_{}.txt'.format(idx)), 'w+') as file:
+    with open(os.path.join(exp_dir, 'state/state_trajectory_{}.txt'.format(idx)), 'w+') as file:
         file.writelines(trajectory)
 
-
+    with open(os.path.join(exp_dir, 'success_params/success_params_trajectory_{}.txt'.format(idx)), 'w+') as file:
+        file.writelines(success_params_trajectory)
 
 class Trainer():
     def __init__(self, args):

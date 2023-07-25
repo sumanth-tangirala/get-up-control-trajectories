@@ -326,7 +326,7 @@ class HumanoidStandupVelocityEnv(HumanoidStandupEnv):
 
     @property
     def _done(self):
-        if self._step_num >= self.teacher_episode_length and self.physics.center_of_mass_position()[2] < 0.5:
+        if not self.args.get_trajectories and self._step_num >= self.teacher_episode_length and self.physics.center_of_mass_position()[2] < 0.5:
             self.terminal_signal = True
             return True
         if not self.args.get_trajectories and self._step_num < self.teacher_episode_length and np.abs(
