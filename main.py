@@ -60,6 +60,7 @@ class ArgParserTrain(argparse.ArgumentParser):
         self.add_argument("--tag", default="")
         #New Args
         self.add_argument('--get_trajectories', default=False, action='store_true')
+        self.add_argument('--no_videos', default=False, action='store_true')
 def main():
     args = ArgParserTrain().parse_args()
     if args.get_trajectories:
@@ -79,9 +80,11 @@ def get_trajectories(args):
     args = ArgParserTrain().parse_args(namespace=args)
 
     exp_dir = utils.generate_trajectories_dir(args)
-    utils.make_dir(os.path.join(exp_dir, 'videos'))
+    exp_dir = '/Volumes/Htnamus/Research/get-up-control-directories'
     utils.make_dir(os.path.join(exp_dir, 'state'))
     utils.make_dir(os.path.join(exp_dir, 'success_params'))
+    if not args.no_videos:
+        utils.make_dir(os.path.join(exp_dir, 'videos'))
 
     generate_trajectory_partial = partial(generate_trajectory, exp_dir=exp_dir, args=args)
 
@@ -118,8 +121,9 @@ def generate_trajectory(idx, exp_dir, args):
         trajectory.append('\n' + ', '.join([str(i) for i in get_state_to_save(state)]))
         success_params_trajectory.append('\n' + ', '.join([str(i) for i in get_success_params(env)]))
 
-        img = env.render()
-        video.append(img)
+        if not args.no_videos:
+            img = env.render()
+            video.append(img)
 
     if len(video) != 0:
         imageio.mimsave(os.path.join(exp_dir, 'videos/{}.mp4'.format(idx)),video, fps=30)
